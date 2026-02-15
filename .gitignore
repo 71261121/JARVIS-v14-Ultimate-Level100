@@ -66,3 +66,10 @@ htmlcov/
 temp/
 tmp/
 upload/
+
+# API Keys - NEVER COMMIT THESE FILES
+config/api_keys.py
+secrets/
+*.secret
+*_secrets.py
+api_keys_local.py

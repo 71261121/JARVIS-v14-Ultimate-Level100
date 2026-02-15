@@ -101,6 +101,14 @@ try:
 except ImportError as e:
     AI_AVAILABLE = False
 
+# Kimi K2.5 via NVIDIA NIM (Primary AI for Level 100)
+try:
+    from core.ai.kimi_client import KimiK25Client, KimiModel
+    from core.ai.intelligent_router import IntelligentAIRouter
+    KIMI_AVAILABLE = True
+except ImportError as e:
+    KIMI_AVAILABLE = False
+
 # Self-modification modules
 try:
     from core.self_mod.code_analyzer import CodeAnalyzer
@@ -281,6 +289,8 @@ class JARVIS:
     def _init_ai(self):
         """Initialize AI engine"""
         self.ai_client = None
+        self.kimi_client = None
+        self.ai_router = None
         self.rate_limiter = None
         self.model_selector = None
         self.response_parser = None
@@ -289,8 +299,19 @@ class JARVIS:
             return
         
         try:
-            # Get API key
-            api_key = os.environ.get('OPENROUTER_API_KEY')
+            # Get API keys
+            openrouter_key = os.environ.get('OPENROUTER_API_KEY')
+            kimi_key = os.environ.get('KIMI_API_KEY')
+            
+            # Try to load from config module
+            try:
+                from config import KIMI_API_KEY, OPENROUTER_API_KEY
+                if not kimi_key:
+                    kimi_key = KIMI_API_KEY
+                if not openrouter_key:
+                    openrouter_key = OPENROUTER_API_KEY
+            except ImportError:
+                pass
             
             # Rate limiter
             self.rate_limiter = RateLimiterManager()
@@ -301,18 +322,43 @@ class JARVIS:
             # Response parser
             self.response_parser = ResponseParser()
             
-            # AI Client (optional - requires API key)
-            if api_key:
+            # Initialize Kimi K2.5 as primary AI (Level 100)
+            if KIMI_AVAILABLE and kimi_key:
+                try:
+                    self.kimi_client = KimiK25Client(
+                        api_key=kimi_key,
+                        enable_thinking=True,  # Enable deep reasoning
+                        enable_cache=True,
+                    )
+                    if self.debug:
+                        print("[DEBUG] Kimi K2.5 client initialized (Primary AI)")
+                except Exception as e:
+                    if self.debug:
+                        print(f"[DEBUG] Kimi K2.5 init failed: {e}")
+            
+            # Initialize Intelligent Router for fallback
+            if KIMI_AVAILABLE and kimi_key and openrouter_key:
+                try:
+                    self.ai_router = IntelligentAIRouter(
+                        kimi_api_key=kimi_key,
+                        openrouter_api_key=openrouter_key,
+                        auto_fallback=True,
+                    )
+                    if self.debug:
+                        print("[DEBUG] Intelligent AI Router initialized (Kimi + OpenRouter fallback)")
+                except Exception as e:
+                    if self.debug:
+                        print(f"[DEBUG] AI Router init failed: {e}")
+            
+            # Fallback to OpenRouter client
+            if openrouter_key and not self.ai_router:
                 self.ai_client = OpenRouterClient(
-                    api_key=api_key,
+                    api_key=openrouter_key,
                     default_model=FreeModel.AUTO_FREE,
                     enable_cache=self.config['ai'].get('enable_cache', True)
                 )
                 if self.debug:
-                    print("[DEBUG] AI client initialized with API key")
-            else:
-                if self.debug:
-                    print("[DEBUG] AI client not initialized (no API key)")
+                    print("[DEBUG] OpenRouter client initialized")
                     
         except Exception as e:
             print(f"Error initializing AI: {e}")
@@ -660,17 +706,23 @@ For more help, see docs/USER_GUIDE.md
         print("Modules:")
         print(f"  Core Infrastructure: {'✓' if CORE_AVAILABLE else '✗'}")
         print(f"  AI Engine: {'✓' if AI_AVAILABLE else '✗'}")
+        print(f"  Kimi K2.5 (Level 100): {'✓' if KIMI_AVAILABLE else '✗'}")
         print(f"  Self-Modification: {'✓' if SELF_MOD_AVAILABLE else '✗'}")
         print(f"  User Interface: {'✓' if INTERFACE_AVAILABLE else '✗'}")
         print(f"  Security: {'✓' if SECURITY_AVAILABLE else '✗'}")
         print(f"  Memory: {'✓' if MEMORY_AVAILABLE else '✗'}")
         
         print()
+        print("AI Configuration:")
+        print(f"  Kimi K2.5: {'✓ Connected' if self.kimi_client else '✗ Not initialized'}")
+        print(f"  AI Router: {'✓ Active' if self.ai_router else '✗ Not initialized'}")
+        print(f"  OpenRouter: {'✓ Fallback' if self.ai_client else '✗ Not configured'}")
+        
+        print()
         print("Configuration:")
         print(f"  Config file: {self.config_path}")
         print(f"  Debug mode: {self.debug}")
         print(f"  AI Model: {self.config['ai'].get('model', 'not set')}")
-        print(f"  API Key: {'configured' if os.environ.get('OPENROUTER_API_KEY') else 'not set'}")
     
     def shutdown(self):
         """Graceful shutdown"""
@@ -745,6 +797,7 @@ Project Root: {PROJECT_ROOT}
 Modules Available:
   Core: {CORE_AVAILABLE}
   AI: {AI_AVAILABLE}
+  Kimi K2.5 (Level 100): {KIMI_AVAILABLE}
   Self-Mod: {SELF_MOD_AVAILABLE}
   Interface: {INTERFACE_AVAILABLE}
   Security: {SECURITY_AVAILABLE}

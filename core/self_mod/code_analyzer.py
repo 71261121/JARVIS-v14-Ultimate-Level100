@@ -1340,3 +1340,337 @@ if __name__ == "__main__":
         print(f"   {key}: {value}")
     
     print("\n" + "=" * 70)
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# PHASE 2: SEMANTIC CODE ANALYZER (Level 40-50)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+@dataclass
+class SemanticAnalysis:
+    """
+    Complete semantic analysis result.
+    
+    Combines structural analysis with semantic understanding.
+    """
+    # Base analysis
+    file_analysis: FileAnalysis = None
+    
+    # Semantic features
+    embedding: Any = None  # CodeEmbedding
+    intent: Any = None     # CodeIntent
+    
+    # Similarity
+    similar_code: List[Any] = field(default_factory=list)
+    
+    # Quality metrics
+    semantic_quality_score: float = 0.0
+    understandability_score: float = 0.0
+    
+    def to_dict(self) -> Dict[str, Any]:
+        result = {
+            'file': self.file_analysis.path if self.file_analysis else None,
+            'success': self.file_analysis.success if self.file_analysis else False,
+            'semantic_quality': self.semantic_quality_score,
+            'understandability': self.understandability_score,
+        }
+        
+        if self.intent:
+            result['intent'] = {
+                'primary': self.intent.primary_intent.name,
+                'summary': self.intent.summary,
+                'complexity': self.intent.complexity.value,
+            }
+        
+        return result
+
+
+class SemanticCodeAnalyzer:
+    """
+    Enhanced code analyzer with semantic understanding (Phase 2).
+    
+    Combines:
+    - Traditional AST analysis (CodeAnalyzer)
+    - Semantic embedding (SemanticCodeEmbedder)
+    - Intent analysis (IntentAnalyzer)
+    - Similarity detection (SimilarityEngine)
+    
+    This is the Level 40-50 upgrade for JARVIS.
+    
+    Usage:
+        analyzer = SemanticCodeAnalyzer(kimi_client)
+        result = analyzer.analyze(code)
+        
+        print(f"Intent: {result.intent.primary_intent.name}")
+        print(f"Quality: {result.semantic_quality_score}")
+    """
+    
+    def __init__(
+        self,
+        kimi_client=None,
+        enable_semantic: bool = True,
+        enable_intent: bool = True,
+        enable_similarity: bool = False,  # Requires indexed corpus
+    ):
+        """
+        Initialize semantic code analyzer.
+        
+        Args:
+            kimi_client: Kimi K2.5 client for AI analysis
+            enable_semantic: Enable semantic embedding
+            enable_intent: Enable intent analysis
+            enable_similarity: Enable similarity detection
+        """
+        self._kimi = kimi_client
+        self._enable_semantic = enable_semantic
+        self._enable_intent = enable_intent
+        self._enable_similarity = enable_similarity
+        
+        # Component analyzers
+        self._code_analyzer = CodeAnalyzer()
+        self._embedder = None
+        self._intent_analyzer = None
+        self._similarity_engine = None
+        
+        # Lazy load semantic components
+        self._initialized = False
+        
+        # Statistics
+        self._stats = {
+            'total_analyzed': 0,
+            'semantic_analyses': 0,
+            'intent_analyses': 0,
+            'failed_analyses': 0,
+        }
+        
+        logger.info("SemanticCodeAnalyzer initialized (Level 40-50)")
+    
+    def _ensure_initialized(self):
+        """Lazy initialization of semantic components"""
+        if self._initialized:
+            return
+        
+        try:
+            if self._enable_semantic:
+                from core.semantic.code_embedder import SemanticCodeEmbedder
+                self._embedder = SemanticCodeEmbedder(kimi_client=self._kimi)
+            
+            if self._enable_intent:
+                from core.semantic.intent_analyzer import IntentAnalyzer
+                self._intent_analyzer = IntentAnalyzer(kimi_client=self._kimi)
+            
+            if self._enable_similarity:
+                from core.semantic.similarity_engine import SimilarityEngine
+                self._similarity_engine = SimilarityEngine(kimi_client=self._kimi)
+                
+        except ImportError as e:
+            logger.warning(f"Semantic modules not fully available: {e}")
+        
+        self._initialized = True
+    
+    def set_kimi_client(self, client):
+        """Set Kimi client for AI analysis"""
+        self._kimi = client
+        if self._embedder:
+            self._embedder.set_kimi_client(client)
+        if self._intent_analyzer:
+            self._intent_analyzer.set_kimi_client(client)
+    
+    def analyze(
+        self,
+        code: str,
+        file_path: str = None,
+        function_name: str = None,
+    ) -> SemanticAnalysis:
+        """
+        Perform complete semantic analysis.
+        
+        Args:
+            code: Source code to analyze
+            file_path: Optional file path for context
+            function_name: Optional function name being analyzed
+            
+        Returns:
+            SemanticAnalysis with complete results
+        """
+        self._ensure_initialized()
+        self._stats['total_analyzed'] += 1
+        
+        result = SemanticAnalysis()
+        
+        # Step 1: Traditional AST analysis
+        result.file_analysis = self._code_analyzer.analyze_code(code, file_path or "<string>")
+        
+        # Step 2: Semantic embedding
+        if self._embedder:
+            try:
+                result.embedding = self._embedder.embed(
+                    code,
+                    file_path=file_path,
+                    function_name=function_name,
+                )
+                self._stats['semantic_analyses'] += 1
+            except Exception as e:
+                logger.warning(f"Semantic embedding failed: {e}")
+        
+        # Step 3: Intent analysis
+        if self._intent_analyzer:
+            try:
+                result.intent = self._intent_analyzer.analyze(
+                    code,
+                    function_name=function_name,
+                    file_path=file_path,
+                )
+                self._stats['intent_analyses'] += 1
+            except Exception as e:
+                logger.warning(f"Intent analysis failed: {e}")
+        
+        # Step 4: Calculate quality scores
+        result.semantic_quality_score = self._calculate_quality_score(result)
+        result.understandability_score = self._calculate_understandability(result)
+        
+        return result
+    
+    def analyze_file(self, file_path: str) -> SemanticAnalysis:
+        """
+        Analyze a file with semantic understanding.
+        
+        Args:
+            file_path: Path to Python file
+            
+        Returns:
+            SemanticAnalysis with complete results
+        """
+        try:
+            with open(file_path, 'r', encoding='utf-8') as f:
+                code = f.read()
+        except Exception as e:
+            result = SemanticAnalysis()
+            result.file_analysis = FileAnalysis(
+                path=file_path,
+                content_hash="",
+                size_bytes=0,
+                parse_time_ms=0,
+                success=False,
+                error=str(e),
+            )
+            return result
+        
+        return self.analyze(code, file_path=file_path)
+    
+    def find_similar(
+        self,
+        code: str,
+        corpus: List[Any] = None,
+        top_k: int = 5,
+    ) -> List[Any]:
+        """
+        Find similar code in corpus.
+        
+        Args:
+            code: Query code
+            corpus: List of CodeEmbedding to search
+            top_k: Maximum results
+            
+        Returns:
+            List of SimilarCodeMatch
+        """
+        self._ensure_initialized()
+        
+        if not self._similarity_engine or not self._embedder:
+            return []
+        
+        # Embed query
+        embedding = self._embedder.embed(code)
+        
+        # Find similar
+        return self._similarity_engine.find_similar(embedding, corpus, top_k)
+    
+    def _calculate_quality_score(self, result: SemanticAnalysis) -> float:
+        """Calculate overall semantic quality score"""
+        score = 0.5
+        
+        # Factor in file analysis
+        if result.file_analysis and result.file_analysis.success:
+            # Add points for documentation
+            if result.file_analysis.module_docstring:
+                score += 0.1
+            
+            # Add points for low complexity
+            if result.file_analysis.total_complexity:
+                if result.file_analysis.total_complexity.cyclomatic < 10:
+                    score += 0.1
+                elif result.file_analysis.total_complexity.cyclomatic < 20:
+                    score += 0.05
+            
+            # Subtract for issues
+            issue_count = len(result.file_analysis.issues)
+            if issue_count == 0:
+                score += 0.1
+            elif issue_count < 5:
+                score += 0.05
+            else:
+                score -= 0.1
+        
+        # Factor in intent analysis
+        if result.intent:
+            if result.intent.confidence_score > 0.7:
+                score += 0.1
+            if result.intent.security_concerns:
+                score -= 0.15
+        
+        return min(1.0, max(0.0, score))
+    
+    def _calculate_understandability(self, result: SemanticAnalysis) -> float:
+        """Calculate code understandability score"""
+        score = 0.5
+        
+        if result.file_analysis:
+            # Documentation
+            if result.file_analysis.module_docstring:
+                score += 0.15
+            
+            docstring_count = sum(
+                1 for f in result.file_analysis.functions if f.docstring
+            )
+            func_count = len(result.file_analysis.functions)
+            
+            if func_count > 0:
+                doc_ratio = docstring_count / func_count
+                score += doc_ratio * 0.2
+            
+            # Complexity (inverse)
+            if result.file_analysis.total_complexity:
+                complexity = result.file_analysis.total_complexity.cyclomatic
+                if complexity < 5:
+                    score += 0.15
+                elif complexity < 10:
+                    score += 0.1
+                elif complexity < 20:
+                    score += 0.05
+        
+        if result.intent:
+            if result.intent.summary:
+                score += 0.1
+        
+        return min(1.0, max(0.0, score))
+    
+    def get_stats(self) -> Dict[str, Any]:
+        """Get analyzer statistics"""
+        stats = self._stats.copy()
+        stats['code_analyzer_stats'] = self._code_analyzer.get_stats()
+        return stats
+
+
+# Global semantic analyzer
+_semantic_analyzer: Optional[SemanticCodeAnalyzer] = None
+
+
+def get_semantic_analyzer(kimi_client=None) -> SemanticCodeAnalyzer:
+    """Get global semantic analyzer"""
+    global _semantic_analyzer
+    if _semantic_analyzer is None:
+        _semantic_analyzer = SemanticCodeAnalyzer(kimi_client=kimi_client)
+    elif kimi_client:
+        _semantic_analyzer.set_kimi_client(kimi_client)
+    return _semantic_analyzer
