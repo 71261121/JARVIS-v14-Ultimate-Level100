@@ -35,6 +35,18 @@ from typing import Optional, Dict, Any, List
 PROJECT_ROOT = Path(__file__).parent.absolute()
 sys.path.insert(0, str(PROJECT_ROOT))
 
+# Load environment variables from .env file
+try:
+    from dotenv import load_dotenv
+    # Load .env from project directory
+    env_file = PROJECT_ROOT / '.env'
+    if env_file.exists():
+        load_dotenv(env_file)
+        # Also try user's home directory
+    load_dotenv(Path.home() / '.jarvis' / '.env')
+except ImportError:
+    pass  # python-dotenv not installed, use system env vars only
+
 # Version info
 __version__ = "14.0.0"
 __author__ = "JARVIS AI Project"
@@ -597,7 +609,7 @@ class JARVIS:
     def _show_help(self):
         """Show help information"""
         if self.help_system:
-            self.help_system.show()
+            print(self.help_system.show())
         else:
             print("""
 Available Commands:
