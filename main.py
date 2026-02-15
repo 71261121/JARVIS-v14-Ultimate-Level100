@@ -320,7 +320,7 @@ class JARVIS:
             
             self.code_analyzer = CodeAnalyzer()
             self.backup_manager = BackupManager(backup_dir=backup_dir)
-            self.safe_modifier = CodeValidator(backup_manager=self.backup_manager)
+            self.safe_modifier = CodeValidator()
             self.improvement_engine = SelfImprovementEngine()
             
             if self.debug:
@@ -390,7 +390,7 @@ class JARVIS:
             os.makedirs(data_dir, exist_ok=True)
             
             self.context_manager = ContextManager()
-            self.chat_storage = ChatStorage(storage_path=os.path.join(data_dir, "chat.db"))
+            self.chat_storage = ChatStorage(db_path=os.path.join(data_dir, "chat.db"))
             self.memory_optimizer = MemoryOptimizer()
             
             if self.debug:
