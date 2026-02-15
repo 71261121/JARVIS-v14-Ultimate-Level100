@@ -36,7 +36,7 @@ pip install pynacl --only-binary :all: 2>/dev/null || {
 echo ""
 echo "[5/5] Cloning JARVIS v14 Ultimate..."
 cd ~
-git clone https://github.com/71261121/auto-jarvis-.git jarvis
+git clone https://github.com/71261121/JARVIS-v14-Ultimate-Level100.git jarvis
 cd jarvis
 
 echo ""
